@@ -7,3 +7,6 @@ Flags are stored as custom attributes per face.
 Has normal table issues I wasn't able to solve. Won't probably arise with character models, but might cause issues with levels.
 
 Provided as is.
+
+Update (02/09/2026):
+Standalone ThreeJS/HTML Viewer.
