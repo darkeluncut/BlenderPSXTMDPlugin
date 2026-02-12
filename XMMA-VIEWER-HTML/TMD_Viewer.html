@@ -1,0 +1,1574 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>XMMA - PSX TMD Viewer - ElMrtev</title>
+<style>
+    body { margin: 0; background: #000; color: #00ff00; font-family: 'Courier New', monospace; overflow: hidden; }
+    #ui { position: absolute; top: 10px; left: 10px; z-index: 10; background: rgba(0,20,0,0.8); padding: 15px; border: 1px solid #00ff00; border-radius: 5px; max-width: 300px; }
+    .btn { background: #004400; color: #00ff00; border: 1px solid #00ff00; padding: 8px 15px; cursor: pointer; margin: 10px 0; width: 100%; font: inherit; }
+    .btn:hover { background: #00ff00; color: #000; }
+    label { display: block; margin-top: 10px; color: #00ff00; }
+    #status { margin-top: 15px; font-size: 11px; color: #fff; word-wrap: break-word; }
+    input[type="file"] { display: none; }
+    #vram-toggle { position: absolute; bottom: 10px; left: 10px; z-index: 20; background: #004400; color: #00ff00; border: 1px solid #00ff00; padding: 5px 10px; cursor: pointer; font-size: 12px; }
+    #vram-window { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); z-index: 30; background: rgba(0,0,0,0.9); padding: 10px; border: 1px solid #00ff00; display: none; }
+    #vram-canvas { image-rendering: pixelated; border: 1px solid #555; }
+    #vram-controls { position: absolute; bottom: 10px; right: 10px; font-size: 11px; color: #00ff00; }
+    #vram-controls label { display: inline-block; margin-left: 12px; }
+
+    #object-panel, #anim-panel {
+        position: absolute;
+        right: 10px;
+        width: 340px;
+        background: rgba(0,20,0,0.85);
+        border: 1px solid #00ff00;
+        border-radius: 5px;
+        color: #00ff00;
+        font-size: 13px;
+        max-height: 80vh;
+        overflow: hidden;
+        box-shadow: 0 0 10px #00ff0040;
+    }
+    #object-panel { top: 10px; }
+    #anim-panel { display: none; }
+
+    #object-header, #anim-header {
+        background: #004400;
+        padding: 8px 12px;
+        border-bottom: 1px solid #00ff00;
+        cursor: pointer;
+        user-select: none;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+    }
+    #object-header:hover, #anim-header:hover { background: #006600; }
+    #object-content, #anim-content {
+        max-height: calc(80vh - 38px);
+        overflow-y: auto;
+        padding: 8px 0;
+    }
+    #object-content:not(.show),
+    #anim-content:not(.show) {
+        display: none;
+    }
+
+    .group-header {
+        padding: 6px 12px 6px 44px;
+        background: #002200;
+        cursor: pointer;
+        user-select: none;
+        font-weight: bold;
+        position: relative;
+        display: flex;
+        align-items: center;
+    }
+    .group-header:hover { background: #003300; }
+    .group-vis-toggle,
+    .vis-toggle {
+        position: absolute;
+        left: 12px;
+        width: 20px;
+        height: 20px;
+        background: #111;
+        border: 2px solid #00cc44;
+        border-radius: 4px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 14px;
+        font-weight: bold;
+        color: #44ff88;
+    }
+    .group-vis-toggle.hidden,
+    .vis-toggle.hidden {
+        border-color: #cc4444;
+        color: #ff6666;
+        background: #220000;
+    }
+    .group-content { display: none; }
+    .group-content.show { display: block; }
+    .object-item, .anim-item {
+        padding: 4px 16px 4px 44px;
+        display: flex;
+        align-items: center;
+        cursor: pointer;
+        user-select: none;
+        position: relative;
+    }
+    .object-item:hover, .anim-item:hover { background: #003300; }
+    .object-item.selected, .anim-item.selected { background: #004d00; }
+
+    #anim-controls { margin-top: 15px; display: none; }
+    #anim-controls label { display: inline-block; margin-right: 15px; }
+</style>
+</head>
+<body>
+<div id="ui">
+    <div style="font-weight: bold; border-bottom: 1px solid #00ff00; padding-bottom: 5px; margin-bottom: 10px;">XMMA - PSX TMD Viewer - ElMrtev</div>
+    <button id="load-tmd" class="btn">LOAD .TMD FILE</button>
+    <input type="file" id="tmd-loader" accept=".tmd">
+    <button id="load-tim" class="btn">LOAD .TIM FILES</button>
+    <input type="file" id="tim-loader" multiple>
+    <button id="load-pos" class="btn">LOAD .TMD_POS</button>
+    <input type="file" id="pos-loader" accept=".tmd_pos">
+    <button id="load-anm" class="btn">LOAD .TMD_ANM</button>
+    <input type="file" id="anm-loader" accept=".tmd_anm">
+    <label><input type="checkbox" id="wireframe"> Wireframe</label>
+    <label><input type="checkbox" id="grid" checked> Grid</label>    
+    <label><input type="checkbox" id="flipY" checked> Upright (flip Y)</label>
+    <label><input type="checkbox" id="gte-lighting" checked> GTE Lighting</label>
+    <div id="status">Ready.</div>
+</div>
+
+<div id="object-panel">
+    <div id="object-header">Objects <span>-</span></div>
+    <div id="object-content" class="show"></div>
+</div>
+
+<div id="anim-panel">
+    <div id="anim-header">Animations <span>-</span></div>
+    <div id="anim-content" class="show"></div>
+</div>
+
+<button id="vram-toggle">Show VRAM</button>
+<div id="vram-window">
+    <canvas id="vram-canvas" width="1024" height="512"></canvas>
+    <div id="vram-controls">
+        <label><input type="checkbox" id="uv-overlay" checked> UV Overlay</label>
+    </div>
+</div>
+
+<script type="importmap">
+{
+    "imports": {
+        "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+        "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+    }
+}
+</script>
+
+
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
+let scene, camera, renderer, controls, modelGroup, grid, allMaterials = [], currentBuffer = null;
+let vram = new Uint16Array(1024 * 512);
+let objectGroups = [];
+let allTextureGroups = [];
+let posRawData = [];        // TMD_POS rest pose (rx,ry,rz,lx,ly,lz per object)
+let objectListData = [];
+let animations = [];
+let currentAnimIndex = -1;
+let currentFrameFloat = 0;
+let clock;
+
+// Unified PSX fixed-point constants
+const PS1_ROT_TO_RAD = (Math.PI * 2) / 4096;   
+const PS1_POS_SCALE = 1.0 / 4096;           
+const PS1_SCALE_ONE = 4096;                 
+
+const _e = new THREE.Euler(0,0,0,'ZXY');
+const _q1 = new THREE.Quaternion();
+const _q2 = new THREE.Quaternion();
+const _qa = new THREE.Quaternion();
+const _tempEuler = new THREE.Euler();
+
+let boneLookup = [];
+
+function init() {
+    clock = new THREE.Clock();
+    scene = new THREE.Scene();
+    scene.background = new THREE.Color(0x000011);
+    camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 100000);
+    camera.position.set(10, 10, 10);
+    renderer = new THREE.WebGLRenderer({ antialias: true });
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    document.body.appendChild(renderer.domElement);
+    controls = new OrbitControls(camera, renderer.domElement);
+    scene.add(new THREE.AmbientLight(0xffffff, 0.6));
+    const dir = new THREE.DirectionalLight(0xffffff, 0.8);
+    dir.position.set(5, 10, 7);
+    scene.add(dir);
+    grid = new THREE.GridHelper(20, 20, 0x004400, 0x002200);
+    scene.add(grid);
+    window.addEventListener('resize', onWindowResize);
+    animate();
+}
+
+function onWindowResize() {
+    camera.aspect = window.innerWidth / window.innerHeight;
+    camera.updateProjectionMatrix();
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    setPanelsPosition();
+}
+
+function setPanelsPosition() {
+    const objPanel = document.getElementById('object-panel');
+    const animPanel = document.getElementById('anim-panel');
+    if (animPanel.style.display !== 'none') {
+        animPanel.style.top = (objPanel.offsetTop + objPanel.offsetHeight + 20) + 'px';
+    }
+}
+
+// Apply static TMD_POS rest pose 
+function applyPosTransforms(flipY) {
+
+    // 2. Now apply transforms using world-space logic
+    objectGroups.forEach((group, i) => {
+        const pos = posRawData[i] || {rx:0, ry:0, rz:0, lx:0, ly:0, lz:0};
+
+        const tx = flipY ? -pos.lx * PS1_POS_SCALE : pos.lx * PS1_POS_SCALE;
+        const ty = flipY ? -pos.ly * PS1_POS_SCALE : pos.ly * PS1_POS_SCALE;
+        const tz = pos.lz * PS1_POS_SCALE;
+        
+        const worldPos = new THREE.Vector3(tx, ty, tz);
+
+        let rx = pos.rx * PS1_ROT_TO_RAD;
+        let ry = pos.ry * PS1_ROT_TO_RAD;
+        let rz = pos.rz * PS1_ROT_TO_RAD;
+        if (flipY) { rx = -rx; ry = -ry; rz = -rz; }
+
+        _tempEuler.set(rx, ry, rz, 'YXZ');
+        const worldQuat = new THREE.Quaternion().setFromEuler(_tempEuler);
+
+        // Convert World to Local
+        if (group.parent) {
+            // Update parent matrices so we have fresh data for the conversion
+            group.parent.updateMatrixWorld(true);
+            
+            // Convert world position to local position relative to parent
+            group.parent.worldToLocal(worldPos);
+            group.position.copy(worldPos);
+
+            const parentWorldQuat = new THREE.Quaternion();
+            group.parent.getWorldQuaternion(parentWorldQuat);
+            group.quaternion.copy(parentWorldQuat.invert().multiply(worldQuat));           
+	}       
+	group.scale.set(1, 1, 1);
+    });    
+    
+    cacheBindPose();
+}
+
+function cacheBindPose() {
+    objectGroups.forEach(g=>{
+        g.userData.bindPos = g.position.clone();
+        g.userData.bindQuat = g.quaternion.clone();
+        g.userData.bindScale = g.scale.clone();
+    });
+}
+
+function getPoseAtFrame(anim, frameFloat) {
+    const total = anim.numFrames || 1;
+    let frame = ((frameFloat % total) + total) % total;   // safe wrap
+
+    const pose = Array.from({ length: anim.tracks.length }, () => ({
+        rot: { x: 0, y: 0, z: 0 },
+        pos: { x: 0, y: 0, z: 0 },
+        scl: { x: 4096, y: 4096, z: 4096 }
+    }));
+
+    document.getElementById('status').innerText = 
+        `Playing Frame: ${frame}`;
+
+    anim.tracks.forEach((tr, bone) => {
+        pose[bone].rot = interpolateKeyframe(tr.rot, frame, total, true);
+        pose[bone].pos = interpolateKeyframe(tr.pos, frame, total, false);
+    });
+
+    return pose;
+}
+
+function findExactOrClosestKey(keys, targetFrame) {
+    if (!keys?.length) return null;
+    
+    // If there's an exact match > perfect
+    const exact = keys.find(k => k.t === targetFrame);
+    if (exact) return exact;
+
+    // Otherwise take the closest one before (or first if none before)
+    let best = null;
+    for (const k of keys) {
+        if (k.t <= targetFrame && (!best || k.t > best.t)) {
+            best = k;
+        }
+    }
+    return best || keys[0]; // fallback to first frame
+}
+
+function interpolateKeyframe(keys, frame, total, isRot) {
+    if (!keys.length) return { x: 0, y: 0, z: 0 };
+    if (keys.length === 1) return { ...keys[0] };
+
+    let i = 0;
+    while (i < keys.length - 1 && keys[i + 1].t <= frame) i++;
+
+    const a = keys[i];
+    let b = keys[(i + 1) % keys.length];
+    let timeB = b.t;
+    if (timeB < a.t) timeB += total;
+
+    let alpha = 0;
+    if (timeB > a.t) alpha = (frame - a.t) / (timeB - a.t);
+
+    const lerp = (v0, v1) => v0 + (v1 - v0) * alpha;
+    const lerpRot = (v0, v1) => {
+        let diff = v1 - v0;
+        if (diff > 2048) diff -= 4096;
+        if (diff < -2048) diff += 4096;
+        return v0 + diff * alpha;
+    };
+
+    return isRot
+        ? { x: lerpRot(a.x, b.x), y: lerpRot(a.y, b.y), z: lerpRot(a.z, b.z) }
+        : { x: lerp(a.x, b.x), y: lerp(a.y, b.y), z: lerp(a.z, b.z) };
+}
+
+function updateAnimation(delta) {
+    const flipY = document.getElementById('flipY').checked;
+
+    if (currentAnimIndex < 0 || !animations[currentAnimIndex]) {
+        applyPosTransforms(flipY);
+        return;
+    }
+
+    const anim = animations[currentAnimIndex];
+    const fps = anim.frameRate || 30;
+
+    currentFrameFloat = (currentFrameFloat + delta * fps) % anim.numFrames;
+    if (currentFrameFloat < 0) currentFrameFloat += anim.numFrames;
+
+    // Get interpolated pose for the current floating-point frame
+    const pose = getPoseAtFrame(anim, currentFrameFloat);
+
+    objectGroups.forEach((g, i) => {
+        const bonePose = pose[i];
+        if (!bonePose) {
+            // Fallback to bind pose
+            if (g.userData.bindQuat) g.quaternion.copy(g.userData.bindQuat);
+            if (g.userData.bindPos)  g.position.copy(g.userData.bindPos);
+            return;
+        }
+
+
+	let rx = bonePose.rot.x * PS1_ROT_TO_RAD;
+	let ry = bonePose.rot.y * PS1_ROT_TO_RAD;
+	let rz = bonePose.rot.z * PS1_ROT_TO_RAD;
+
+	if (flipY) {
+	    // Standard PSX-to-Three.js conversion: 
+	    // If Y is up in Three.js and down in PSX, X and Z often need inversion.
+	    rx = -rx; 
+	    ry = -ry; 
+	    rz = -rz; 
+	}
+
+	_e.set(rx, ry, rz, 'XYZ');	
+        //g.quaternion.setFromEuler(_e);
+	_qa.setFromEuler(_e);
+	g.quaternion.copy(g.userData.bindQuat).multiply(_qa);
+  
+        // --- Position ---
+	// Ignore position tracks to not skip in the viewer
+        g.position.copy(g.userData.bindPos || new THREE.Vector3());
+
+    });
+}
+
+function animate() {
+    requestAnimationFrame(animate);
+    const delta = clock.getDelta();
+    updateAnimation(delta);
+    controls.update();
+    renderer.render(scene, camera);
+}
+
+function refreshObjectList() {
+    const container = document.getElementById('object-content');
+    container.innerHTML = '';
+
+    const groups = {
+        mesh:   { name: "Meshes",   items: [] },
+        sprite: { name: "Sprites",  items: [] },
+        line:   { name: "Lines",    items: [] }
+    };
+
+    objectListData.forEach((obj, idx) => {
+        if (groups[obj.type]) groups[obj.type].items.push({idx, obj});
+    });
+
+    Object.entries(groups).forEach(([type, g]) => {
+        if (g.items.length === 0) return;
+
+        const header = document.createElement('div');
+        header.className = 'group-header';
+
+        const toggle = document.createElement('div');
+        toggle.className = 'group-vis-toggle';
+        const anyVisible = g.items.some(i => i.obj.visible);
+        toggle.textContent = anyVisible ? 'Y' : 'X';
+        if (!anyVisible) toggle.classList.add('hidden');
+
+        toggle.onclick = e => {
+            e.stopPropagation();
+            const targetState = !anyVisible;
+            g.items.forEach(({obj}) => {
+                obj.visible = targetState;
+                obj.group.visible = targetState;
+            });
+            refreshObjectList();
+        };
+
+        header.appendChild(toggle);
+        header.appendChild(document.createTextNode(` ${g.name} (${g.items.length})`));
+
+        header.onclick = e => {
+            if (e.target !== toggle) {
+                header.nextElementSibling.classList.toggle('show');
+            }
+            setPanelsPosition();
+        };
+
+        const content = document.createElement('div');
+        content.className = 'group-content show';
+
+        g.items.forEach(({idx, obj}) => {
+            const item = document.createElement('div');
+            item.className = 'object-item';
+            item.dataset.index = idx;
+
+            const eye = document.createElement('div');
+            eye.className = `vis-toggle ${obj.visible ? '' : 'hidden'}`;
+            eye.textContent = obj.visible ? 'Y' : 'X';
+
+            item.appendChild(eye);
+            item.appendChild(document.createTextNode(obj.name));
+
+            item.onclick = e => {
+                if (e.target === eye) return;
+                document.querySelectorAll('.object-item.selected')
+                    .forEach(el => el.classList.remove('selected'));
+                if (e.shiftKey || e.ctrlKey) {
+                    item.classList.toggle('selected');
+                } else {
+                    item.classList.add('selected');
+                }
+            };
+
+            eye.onclick = e => {
+                e.stopPropagation();
+                const selected = document.querySelectorAll('.object-item.selected');
+                if (selected.length > 1 && item.classList.contains('selected')) {
+                    selected.forEach(el => {
+                        const i = parseInt(el.dataset.index);
+                        objectListData[i].visible = !objectListData[i].visible;
+                        objectListData[i].group.visible = objectListData[i].visible;
+                    });
+                } else {
+                    obj.visible = !obj.visible;
+                    obj.group.visible = obj.visible;
+                }
+                refreshObjectList();
+            };
+
+            content.appendChild(item);
+        });
+
+        container.appendChild(header);
+        container.appendChild(content);
+    });
+    setPanelsPosition();
+}
+
+function refreshAnimList() {
+    const container = document.getElementById('anim-content');
+    container.innerHTML = '';
+
+    let item = document.createElement('div');
+    item.className = 'anim-item' + (currentAnimIndex === -1 ? ' selected' : '');
+    item.textContent = 'None (Static Pose)';
+    item.onclick = () => {
+        currentAnimIndex = -1;
+        currentFrameFloat = 0;
+        document.getElementById('anim-playing').checked = false;
+        refreshAnimList();
+    };
+    container.appendChild(item);
+
+    animations.forEach((anim, idx) => {
+        item = document.createElement('div');
+        item.className = 'anim-item' + (currentAnimIndex === idx ? ' selected' : '');
+        item.textContent = `${anim.name} (${anim.numFrames} frames)`;
+        item.onclick = () => {
+            currentAnimIndex = idx;
+            currentFrameFloat = 0;
+            
+            refreshAnimList();
+        };
+        container.appendChild(item);
+    });
+}
+
+function parseTMD_ANM(buffer) {
+    if (!objectGroups || objectGroups.length === 0) {
+        alert('Load a TMD first to define bone count');
+        return;
+    }
+
+    const dv = new DataView(buffer);
+    const u8 = new Uint8Array(buffer);
+    const fileSize = buffer.byteLength;
+    const boneCount = objectGroups.length;
+
+    // Container parsing
+    let entryOffsets = [];
+    let names = [];
+
+    const tocOffset = fileSize > 4 ? dv.getUint32(0x00, true) : 0;
+    const symbolTableOffset = fileSize > 8 ? dv.getUint32(0x04, true) : 0;
+
+    if (tocOffset) {
+        let ptr = tocOffset;
+        while (ptr + 4 <= fileSize) {
+            const rel = dv.getUint32(ptr, true);
+            if (rel === 0) break;
+            entryOffsets.push(tocOffset + rel);
+            ptr += 4;
+        }
+    }
+    if (symbolTableOffset) {
+        let ptr = symbolTableOffset;
+        while (ptr + 4 <= fileSize) {
+            const rel = dv.getUint32(ptr, true);
+            if (rel === 0) break;
+            const start = symbolTableOffset + rel;
+            let end = start;
+            while (end < fileSize && u8[end] !== 0) end++;
+            names.push(new TextDecoder().decode(u8.subarray(start, end)).trim());
+            ptr += 4;
+        }
+    }
+
+    if (entryOffsets.length === 0) entryOffsets = [0];
+
+    animations = [];
+
+    entryOffsets.forEach((pStart, idx) => {
+        if (pStart + 4 > fileSize) return;
+
+        const animType = dv.getUint16(pStart, true);
+        const payloadStart = pStart + 2;
+
+        const tracks = Array.from({ length: boneCount }, () => ({ rot: [], pos: [], scl: [] }));
+	let frameCount = 0;
+
+        switch (animType) {
+	case 3: {
+	    console.warn(`Anim Type 3`);	
+	    const stride = 0x60; // 30 shorts * 2
+
+	    frameCount = dv.getUint16(payloadStart, true);
+	    let ptr = payloadStart + 6; 
+
+	    for (let k = 0; k < frameCount; k++) {
+	        for (let b = 0; b < boneCount; b++) {
+		    const meshIndex = boneLookup[b];
+	    	    if (meshIndex === -1) continue;
+	
+		    let rx = dv.getInt16(ptr, true);
+	            let ry = dv.getInt16(ptr + 2, true);
+	            let rz = dv.getInt16(ptr + 4, true);
+		    ptr = ptr + 6;
+	    
+		    tracks[b].rot.push({
+	                t: k,
+	                x: rx,
+	                y: ry,
+	                z: -rz
+	            });
+
+		    if (b === 0) {
+	                const tx = dv.getInt16(ptr, true);
+	                const ty = dv.getInt16(ptr + 2, true);
+	                const tz = dv.getInt16(ptr + 4, true);
+   		        ptr = ptr + 6;
+
+	                tracks[b].pos.push({
+        	            t: k,
+                	    x: tx,
+	                    y: ty,
+	                    z: tz
+	                });
+	            }
+		}
+	    }    
+	    break;
+	}
+	case 4: {
+	    console.warn(`Anim Type 4`);	
+	    const stride = 0x40; // 17 ints * 4 bytes
+
+	    frameCount = dv.getUint16(payloadStart, true);
+	    let ptr = payloadStart + 6; 
+
+	    for (let k = 0; k < frameCount; k++) {
+	        for (let b = 0; b < boneCount; b++) {
+		    const meshIndex = boneLookup[b];
+	    	    if (meshIndex === -1) continue;
+	    
+	            // Rotations are in the first word of the bone block
+	            const rotPacked = dv.getInt32(ptr, true);
+		    ptr = ptr + 4;
+
+		    let rx = ((rotPacked << 2) >> 22) ;
+	            let ry = ((rotPacked << 12) >> 22);
+	            let rz = -((rotPacked << 22) >> 20);	
+	            // Apply the bit-depth expansion
+	            rx *= 4;
+	            ry *= 4;
+
+	            tracks[b].rot.push({ 
+	                t: k, 
+	                x: rx, 
+	                y: ry, 
+	                z: rz 
+	            });
+
+		    if (b === 0) {
+	                const transPacked = dv.getUint32(ptr, true);
+	  	        ptr = ptr + 4;
+
+	                const tx = ((transPacked >> 21)  - 0x400) * 2;
+	                const ty = ((transPacked >> 11) & 0x3FF) * -2;
+	                const tz = ((transPacked & 0x7FF) - 0x400) * 2;
+
+	                if (tracks[b].pos) {
+        	            tracks[b].pos.push({ t: k, x: tx, y: ty, z: tz });
+	                }
+	            }
+	        }
+	
+	    }
+	    break;
+	}
+	case 5: {
+	    console.warn(`Anim Type 5`);	
+	    const stride = 0x62; // 31 shorts * 2
+
+	    frameCount = dv.getUint16(payloadStart, true);
+	    let ptr = payloadStart + 4; 
+	    let frameCountB = dv.getUint16(ptr, true);
+	    ptr = ptr + 2;
+
+	    for (let k = 0; k < frameCount; k++) {
+	        const frame = dv.getUint16(ptr, true);
+		ptr = ptr + 2;
+
+	        for (let b = 0; b < boneCount; b++) {
+		    const meshIndex = boneLookup[b];
+	    	    if (meshIndex === -1) continue;
+
+		    let rx = dv.getInt16(ptr, true);
+	            let ry = dv.getInt16(ptr + 2, true);
+	            let rz = dv.getInt16(ptr + 4, true);
+		    ptr = ptr + 6;
+	    
+		    tracks[b].rot.push({
+	                t: frame,
+	                x: rx,
+	                y: ry,
+	                z: -rz
+	            });
+
+		    if (b === 0) {
+	                const tx = dv.getInt16(ptr, true);
+	                const ty = dv.getInt16(ptr + 2, true);
+	                const tz = dv.getInt16(ptr + 4, true);
+	   	        ptr = ptr + 6;
+
+	                tracks[b].pos.push({
+	                    t: frame,
+	                    x: tx,
+	                    y: ty,
+	                    z: tz
+	                });
+	            }
+		}
+	    }    
+	    break;
+	}
+	case 6: {
+	    console.warn(`Anim Type 6`);	
+	    const stride = 0x44; // 17 ints * 4 bytes
+
+	    frameCount = dv.getUint16(payloadStart, true);
+	    let ptr = payloadStart + 6; 
+	    let frameCountB = dv.getUint32(ptr, true);
+	    ptr = ptr + 4;
+
+	    for (let k = 0; k < frameCount; k++) {
+	        const frame = dv.getUint32(ptr, true);
+	        ptr = ptr + 4;
+	
+	        for (let b = 0; b < boneCount; b++) {
+		    const meshIndex = boneLookup[b];
+	    	    if (meshIndex === -1) continue;
+	    
+	            // Rotations are in the first word of the bone block
+	            // Bone data starts at ptr + 4. Each bone is 2 ints 
+	            const rotPacked = dv.getInt32(ptr, true);
+		    ptr = ptr + 4;
+
+		    let rx = ((rotPacked << 2) >> 22) ;
+	            let ry = ((rotPacked << 12) >> 22);
+	            let rz = -((rotPacked << 22) >> 20);	
+	            // Apply the bit-depth expansion
+	            rx *= 4;
+	            ry *= 4;
+
+	            tracks[b].rot.push({ 
+	                t: frame, 
+	                x: rx, 
+        	        y: ry, 
+	                z: rz 
+	            });
+
+		    if (b === 0) {
+	                const transPacked = dv.getUint32(ptr, true);
+	  	        ptr = ptr + 4;
+
+	                const tx = ((transPacked >> 21)  - 0x400) * 2;
+	                const ty = ((transPacked >> 11) & 0x3FF) * -2;
+        	        const tz = ((transPacked & 0x7FF) - 0x400) * 2;
+
+	                if (tracks[b].pos) {
+        	            tracks[b].pos.push({ t: frame, x: tx, y: ty, z: tz });
+	                }
+        	    }
+	        }
+	
+	    }
+	    break;
+	}
+
+             
+
+            // Legacy types
+            case 1:
+            case 2:
+            case 9:
+            case 8:
+                console.warn(`Type not implemented`);
+                break;
+
+            default:
+                console.warn(`Unknown anim type`);
+        }
+
+        animations.push({
+            name: names[idx] || `Anim_${idx}_t${animType.toString(16).padStart(2,'0')}`,
+            tracks,
+            numFrames: frameCount,
+            frameRate: 30
+        });
+    });
+
+
+    // UI update
+    if (animations.length > 0) {
+        currentAnimIndex = 0;
+        currentFrameFloat = 0;
+        document.getElementById('anim-panel').style.display = 'block';
+        document.getElementById('anim-content').classList.add('show');
+        refreshAnimList();
+        setPanelsPosition();
+        document.getElementById('status').innerText = 
+            `Loaded ${animations.length} animation(s) from .ANM`;
+    } else {
+        document.getElementById('status').innerText = 'No valid animations found.';
+    }
+}
+
+function updateVramCanvas() {
+    const canvas = document.getElementById('vram-canvas');
+    const ctx = canvas.getContext('2d');
+    const img = ctx.createImageData(1024, 512);
+
+    for (let i = 0; i < vram.length; i++) {
+        const c = vram[i];
+        const p = i * 4;
+        img.data[p    ] = (c & 0x1F) << 3;
+        img.data[p + 1] = ((c >> 5) & 0x1F) << 3;
+        img.data[p + 2] = ((c >> 10) & 0x1F) << 3;
+        img.data[p + 3] = 255;
+    }
+    ctx.putImageData(img, 0, 0);
+
+    if (document.getElementById('uv-overlay').checked && allTextureGroups.length > 0) {
+        ctx.strokeStyle = '#ff00ff';
+        ctx.fillStyle = 'rgba(255,0,255,0.15)';
+        ctx.lineWidth = 2;
+        allTextureGroups.forEach(g => {
+            const bpp = g.bpp;
+            const tppw = bpp === 0 ? 4 : bpp === 1 ? 2 : 1;
+            const px = g.tsb & 0xF;
+            const py = (g.tsb >> 4) & 1;
+            const ux = px * 64;
+            const vy = py * 256;
+            for (let i = 0; i < g.uv.length; i += 6) {
+                ctx.beginPath();
+                ctx.moveTo(ux + g.uv[i  ] / tppw, vy + g.uv[i+1]);
+                ctx.lineTo(ux + g.uv[i+2] / tppw, vy + g.uv[i+3]);
+                ctx.lineTo(ux + g.uv[i+4] / tppw, vy + g.uv[i+5]);
+                ctx.closePath();
+                ctx.stroke();
+                ctx.fill();
+            }
+        });
+    }
+}
+
+function parseTMD(buffer) {
+    currentBuffer = buffer;
+    const dv = new DataView(buffer);
+    const flipY = document.getElementById('flipY').checked;
+    const useGte = document.getElementById('gte-lighting').checked;
+
+    if (dv.getUint32(0, true) !== 0x41) return;
+
+    const flags = dv.getUint32(4, true);
+    const nObj = dv.getUint32(8, true);
+    const baseAddr = (flags & 1) ? 0 : 12;
+
+    if (modelGroup) scene.remove(modelGroup);
+    modelGroup = new THREE.Group();
+    scene.add(modelGroup);
+    allMaterials = [];
+    objectGroups = [];
+    allTextureGroups = [];
+    objectListData = [];
+
+    // PSX GTE Light Matrix (Fixed Point 4.12)
+    const lm = [
+        [1553, 3105, 2171], // Light 0
+        [0, 0, 0],          // Light 1
+        [0, 0, 0]           // Light 2
+    ];
+    // Light Color Matrix
+    const lc = [
+        [3277, 0, 0], // R
+        [3277, 0, 0], // G
+        [3277, 0, 0]  // B
+    ];
+    // Background Color (Ambient)
+    const bk = [2458, 2458, 2458];
+
+    for (let i = 0; i < nObj; i++) {
+        const o = 12 + i * 28;
+        const vofs = baseAddr + dv.getUint32(o, true);
+        const nv   = dv.getUint32(o+4, true);
+        const nofs = baseAddr + dv.getUint32(o+8, true);
+        const nn   = dv.getUint32(o+12, true);
+        const pofs = baseAddr + dv.getUint32(o+16, true);
+        const np   = dv.getUint32(o+20, true);
+        const sc   = dv.getInt32(o+24, true);
+        const sf   = Math.pow(2, sc) / 4096;
+
+        const verts = [];
+        for (let j = 0; j < nv; j++) {
+            const off = vofs + j*8;
+            const x = dv.getInt16(off, true);
+            const y = dv.getInt16(off+2, true);
+            const z = dv.getInt16(off+4, true);
+            verts.push(new THREE.Vector3(-x, flipY ? -y : y, z).multiplyScalar(sf));
+        }
+
+        const norms = [];
+        for (let j = 0; j < nn; j++) {
+            const off = nofs + j*8;
+            const x = dv.getInt16(off, true);
+            const y = dv.getInt16(off+2, true);
+            const z = dv.getInt16(off+4, true);
+            norms.push(new THREE.Vector3(-x, flipY ? -y : y, z));
+        }
+
+        const matGroups = new Map();
+        let ptr = pofs;
+        let hasTex = false;
+        let hasLine = false;
+        let hasSprite = false;
+
+        for (let j = 0; j < np; j++) {
+            const il = dv.getUint8(ptr + 1);
+            const mode = dv.getUint8(ptr + 3);
+            const code = mode >> 5;
+
+            if (mode & 4) hasTex = true;
+            if (code === 2) hasLine = true;
+            if (code === 3) hasSprite = true;
+
+            let b = ptr + 4;
+            let uv = [];
+            let cl = 0, ts = 0;
+            let cols = [], vi = [], ni = [];
+
+            if (code === 1) {
+                const isT = !!(mode & 4);
+                const isQ = !!(mode & 8);
+                const isG = !!(mode & 16);
+                const isL = !(dv.getUint8(ptr + 2) & 1);
+                const abe = (mode >> 1) & 1;
+
+                if (isT) {
+                    uv.push(dv.getUint8(b++), dv.getUint8(b++));
+                    cl = dv.getUint16(b, true); b += 2;
+                    uv.push(dv.getUint8(b++), dv.getUint8(b++));
+                    ts = dv.getUint16(b, true); b += 2;
+                    uv.push(dv.getUint8(b++), dv.getUint8(b++));
+                    if (isQ) {
+                        uv.push(dv.getUint8(b++), dv.getUint8(b++));
+                    } else {
+                        b += 2;
+                    }
+                }
+
+                if (!isL) {
+                    const nc = isG ? (isQ ? 4 : 3) : 1;
+                    for (let k = 0; k < nc; k++) {
+                        cols.push(new THREE.Color(
+                            dv.getUint8(b++) / 255,
+                            dv.getUint8(b++) / 255,
+                            dv.getUint8(b++) / 255
+                        ));
+                        b++;
+                    }
+                }
+
+                const nvtx = isQ ? 4 : 3;
+                for (let k = 0; k < nvtx; k++) {
+                    if (isL) ni.push(dv.getUint16(b, true)), b += 2;
+                    vi.push(dv.getUint16(b, true)), b += 2;
+                }
+
+                const key = `${mode}-${dv.getUint8(ptr + 2)}-${ts}-${cl}`;
+                if (!matGroups.has(key)) {
+                    matGroups.set(key, {pos: [], nor: [], col: [], uv: [], tsb: ts, clut: cl, abe: abe, isL: isL});
+                }
+
+                const g = matGroups.get(key);
+                const tris = isQ ? [[0,1,2],[2,1,3]] : [[0,1,2]];
+
+                // --- GTE LIGHTING CALCULATION ---
+                let gteColors = null;
+                if (useGte && isL) {
+                    gteColors = [];
+                    const nc = isQ ? 4 : 3;
+                    for (let k = 0; k < nc; k++) {
+                        const nIdx = ni[isG ? k : 0];
+                        const n = norms[nIdx];
+                        if (!n) {
+                            gteColors.push(new THREE.Color(0,0,0));
+                            continue;
+                        }
+                        const vx = n.x, vy = n.y, vz = n.z;
+                        let ir0 = (lm[0][0]*vx + lm[0][1]*vy + lm[0][2]*vz) >> 12;
+                        let ir1 = (lm[1][0]*vx + lm[1][1]*vy + lm[1][2]*vz) >> 12;
+                        let ir2 = (lm[2][0]*vx + lm[2][1]*vy + lm[2][2]*vz) >> 12;
+                        
+                        ir0 = Math.max(0, Math.min(4096, ir0));
+                        ir1 = Math.max(0, Math.min(4096, ir1));
+                        ir2 = Math.max(0, Math.min(4096, ir2));
+
+                        let cr = (lc[0][0]*ir0 + lc[0][1]*ir1 + lc[0][2]*ir2) >> 12;
+                        let cg = (lc[1][0]*ir0 + lc[1][1]*ir1 + lc[1][2]*ir2) >> 12;
+                        let cb = (lc[2][0]*ir0 + lc[2][1]*ir1 + lc[2][2]*ir2) >> 12;
+
+                        let ir_r = Math.max(0, Math.min(4096, cr + bk[0]));
+                        let ir_g = Math.max(0, Math.min(4096, cg + bk[1]));
+                        let ir_b = Math.max(0, Math.min(4096, cb + bk[2]));
+
+                        let packet_col = new THREE.Color(1,1,1);
+                        if (cols.length > 0) {
+                            packet_col = cols[isG ? k : 0] || cols[0];
+                        }
+                        const packet_r = Math.round(packet_col.r * 255);
+                        const packet_g = Math.round(packet_col.g * 255);
+                        const packet_b = Math.round(packet_col.b * 255);
+
+                        let mod_r = ((packet_r << 4) * ir_r) >> 12;
+                        let mod_g = ((packet_g << 4) * ir_g) >> 12;
+                        let mod_b = ((packet_b << 4) * ir_b) >> 12;
+
+                        let final_r = Math.max(0, Math.min(255, mod_r >> 4));
+                        let final_g = Math.max(0, Math.min(255, mod_g >> 4));
+                        let final_b = Math.max(0, Math.min(255, mod_b >> 4));
+
+                        gteColors.push(new THREE.Color(final_r / 255, final_g / 255, final_b / 255));
+                    }
+                }
+
+                tris.forEach(t => {
+                    t.forEach(idx => {
+                        const v = verts[vi[idx]];
+                        if (!v) return;
+                        g.pos.push(v.x, v.y, v.z);
+                        if (isL && norms.length) {
+                            const n = norms[ni[isG ? idx : 0]] || new THREE.Vector3(0,1,0);
+                            g.nor.push(n.x, n.y, n.z);
+                        }
+                        
+                        // Color Mixing: Modulate GTE Light by Packet Color
+                        if (gteColors) {
+                            const light = gteColors[idx];
+                            g.col.push(light.r, light.g, light.b);
+                        } else if (cols.length) {
+                            // Pass base color (for Phong or Unlit)
+                            const c = cols[isG ? idx : 0] || cols[0];
+                            g.col.push(c.r, c.g, c.b);
+                        }
+
+                        if (isT) g.uv.push(uv[idx * 2], uv[idx * 2 + 1]);
+                    });
+                });
+            } else if (code === 2) {
+                const isG = !!(mode & 0x10);
+                const abe = !!(mode & 0x02);
+                cols = [];
+                const nc = isG ? 2 : 1;
+                for (let k = 0; k < nc; k++) {
+                    cols.push(new THREE.Color(
+                        dv.getUint8(b++) / 255,
+                        dv.getUint8(b++) / 255,
+                        dv.getUint8(b++) / 255
+                    ));
+                    b++;
+                }
+                vi = [];
+                for (let k = 0; k < 2; k++) {
+                    vi.push(dv.getUint16(b, true));
+                    b += 2;
+                }
+                const key = `${mode}`;
+                if (!matGroups.has(key)) {
+                    matGroups.set(key, {pos: [], col: [], abe: abe, isLine: true});
+                }
+                const g = matGroups.get(key);
+                [0, 1].forEach(idx => {
+                    const v = verts[vi[idx]];
+                    if (!v) return;
+                    g.pos.push(v.x, v.y, v.z);
+                    const c = cols[isG ? idx : 0];
+                    g.col.push(c.r, c.g, c.b);
+                });
+            } else if (code === 3) {
+                const isT = !!(mode & 4);
+                const abe = !!(mode & 2);
+                const col = new THREE.Color(
+                    dv.getUint8(b++) / 255,
+                    dv.getUint8(b++) / 255,
+                    dv.getUint8(b++) / 255
+                );
+                b++;
+                const vi0 = dv.getUint16(b, true); b += 2;
+                b += 2; // pad
+                let u0 = 0, v0 = 0, cl = 0, ts = 0;
+                if (isT) {
+                    u0 = dv.getUint8(b++);
+                    v0 = dv.getUint8(b++);
+                    cl = dv.getUint16(b, true); b += 2;
+                }
+                const w = dv.getUint16(b, true); b += 2;
+                const h = dv.getUint16(b, true); b += 2;
+                const key = `${mode}-${ts}-${cl}`;
+                if (!matGroups.has(key)) {
+                    matGroups.set(key, {pos: [], col: [], uv: [], tsb: ts, clut: cl, abe: abe});
+                }
+                const g = matGroups.get(key);
+                const pos0 = verts[vi0];
+                if (!pos0) continue;
+                const dirY = flipY ? -1 : 1;
+                const pos1 = pos0.clone().add(new THREE.Vector3(w * sf, 0, 0));
+                const pos2 = pos0.clone().add(new THREE.Vector3(0, dirY * h * sf, 0));
+                const pos3 = pos0.clone().add(new THREE.Vector3(w * sf, dirY * h * sf, 0));
+                const uvs = [
+                    u0, v0,
+                    u0 + w, v0,
+                    u0, v0 + h,
+                    u0 + w, v0 + h
+                ];
+                const tris = [[0,1,2], [2,1,3]];
+                tris.forEach(t => {
+                    t.forEach(idx => {
+                        const p = [pos0, pos1, pos2, pos3][idx];
+                        g.pos.push(p.x, p.y, p.z);
+                        g.col.push(col.r, col.g, col.b);
+                        if (isT) g.uv.push(uvs[idx * 2], uvs[idx * 2 + 1]);
+                    });
+                });
+            }
+
+            ptr += 4 + il * 4;
+        }
+
+        const group = new THREE.Group();
+        let type = hasLine ? "line" : (hasSprite ? "sprite" : (hasTex ? "mesh" : "sprite"));
+
+        matGroups.forEach(g => {
+            const geo = new THREE.BufferGeometry();
+            geo.setAttribute('position', new THREE.Float32BufferAttribute(g.pos, 3));
+            if (g.col.length) geo.setAttribute('color', new THREE.Float32BufferAttribute(g.col, 3));
+            
+            // Generate Normals for Phong if not using baked GTE
+            if (!useGte && g.isL) {
+                if (g.nor.length) {
+                    const normalizedNor = [];
+                    for (let kk = 0; kk < g.nor.length; kk += 3) {
+                        const nn = new THREE.Vector3(g.nor[kk], g.nor[kk + 1], g.nor[kk + 2]).divideScalar(4096).normalize();
+                        normalizedNor.push(nn.x, nn.y, nn.z);
+                    }
+                    geo.setAttribute('normal', new THREE.Float32BufferAttribute(normalizedNor, 3));
+                } else {
+                    geo.computeVertexNormals();
+                }
+            }
+
+            let tex = null;
+            if (g.uv.length) {
+                const bpp = (g.tsb >> 7) & 3;
+                allTextureGroups.push({tsb: g.tsb, uv: g.uv.slice(), bpp, cl: g.clut});
+
+                const px = g.tsb & 0xF;
+                const py = (g.tsb >> 4) & 1;
+                const bx = px * 64;
+                const by = py * 256;
+
+                let hasData = false;
+                outer: for (let y = 0; y < 256; y++) {
+                    const vy = by + y;
+                    if (vy >= 512) break;
+                    for (let x = 0; x < 64; x++) {
+                        if (vram[vy * 1024 + bx + x]) {
+                            hasData = true;
+                            break outer;
+                        }
+                    }
+                }
+
+                if (hasData) {
+                    const tw = bpp === 0 ? 256 : bpp === 1 ? 128 : 64;
+                    const cnv = document.createElement('canvas');
+                    cnv.width = tw;
+                    cnv.height = 256;
+                    const ct = cnv.getContext('2d');
+                    const id = ct.createImageData(tw, 256);
+                    let p = 0;
+
+                    let clut = null;
+                    if (bpp < 2) {
+                        const cx = g.clut & 0x3F;
+                        const cy = g.clut >> 6;
+                        const cw = cx * 16;
+                        const ch = cy;
+                        const nc = bpp === 0 ? 16 : 256;
+                        clut = Array.from({length: nc}, (_, i) => vram[ch * 1024 + cw + i]);
+                    }
+
+                    for (let y = 0; y < 256; y++) {
+                        const vy = by + y;
+                        for (let x = 0; x < 64; x++) {
+                            const w = vram[vy * 1024 + bx + x];
+                            const idxs = bpp === 2 ? [w] :
+                                         bpp === 1 ? [w & 255, w >> 8] :
+                                         [w & 15, (w >> 4) & 15, (w >> 8) & 15, (w >> 12) & 15];
+
+                            idxs.forEach(idx => {
+                                const c = bpp < 2 ? clut[idx] : idx;
+                                id.data[p++] = (c & 31) << 3;
+                                id.data[p++] = ((c >> 5) & 31) << 3;
+                                id.data[p++] = ((c >> 10) & 31) << 3;
+                                const rgb = c & 0x7FFF;
+                                id.data[p++] = (rgb === 0 || rgb === 0x7C1F) ? 0 : 255;
+                            });
+                        }
+                    }
+                    ct.putImageData(id, 0, 0);
+
+                    tex = new THREE.CanvasTexture(cnv);
+                    tex.magFilter = THREE.NearestFilter;
+                    tex.minFilter = THREE.NearestFilter;
+                    tex.flipY = false;
+                    tex.wrapS = tex.wrapT = THREE.ClampToEdgeWrapping;
+                }
+
+                const uMax = (bpp === 0) ? 255 : (bpp === 1) ? 127 : 63;
+                const mapped = [];
+
+                for (let k = 0; k < g.uv.length; k += 2) {
+                    mapped.push(g.uv[k] / uMax, g.uv[k + 1] / 255);
+                }
+                geo.setAttribute('uv', new THREE.Float32BufferAttribute(mapped, 2));
+            }
+
+            // Material Selection Logic
+            // Unlit packets -> Basic Material (Full Bright)
+            // Lit Packets + GTE -> Basic Material (Baked Lighting)
+            // Lit Packets + No GTE -> Phong Material (Dynamic Lighting)
+            let MaterialClass = g.isLine ? THREE.LineBasicMaterial : THREE.MeshBasicMaterial;
+            if (g.isL && !useGte && !g.isLine) {
+                MaterialClass = THREE.MeshPhongMaterial;
+            }
+
+            const matParams = {
+                side: THREE.DoubleSide,
+                vertexColors: g.col.length > 0,
+                map: tex,
+                alphaTest: 0.5
+            };
+
+            if (g.abe) {
+                matParams.transparent = true;
+                const abr = (g.tsb >> 5) & 3;
+                switch(abr) {
+                    case 0: // 0.5B + 0.5F
+                        matParams.opacity = 0.5;
+                        break;
+                    case 1: // 1.0B + 1.0F
+                        matParams.blending = THREE.AdditiveBlending;
+                        break;
+                    case 2: // 1.0B - 1.0F
+                        matParams.blending = THREE.CustomBlending;
+                        matParams.blendEquation = THREE.ReverseSubtractEquation;
+                        matParams.blendSrc = THREE.OneFactor;
+                        matParams.blendDst = THREE.OneFactor;
+                        break;
+                    case 3: // 1.0B + 0.25F
+                        matParams.blending = THREE.CustomBlending;
+                        matParams.blendEquation = THREE.AddEquation;
+                        matParams.blendSrc = THREE.OneFactor;
+                        matParams.blendDst = THREE.OneFactor;
+                        matParams.opacity = 0.25;
+                        break;
+                }
+            } else {
+                matParams.transparent = false;
+            }
+
+            const mat = new MaterialClass(matParams);
+
+            if (g.isLine) {
+                const mesh = new THREE.LineSegments(geo, mat);
+                group.add(mesh);
+            } else {
+                const mesh = new THREE.Mesh(geo, mat);
+                group.add(mesh);
+            }
+            allMaterials.push(mat);
+        });
+
+	// 1. Calculate total vertices in this object to find "garbage" single triangles
+        let totalVerts = 0;
+        group.children.forEach(child => {
+            if (child.geometry && child.geometry.attributes.position) {
+                totalVerts += child.geometry.attributes.position.count;
+            }
+        });
+
+        // 2. Define the rule: Hide if it's a mesh with only a triangle
+        const isGarbage = (type === 'mesh' && totalVerts <= 9);
+
+        // 3. Set visibility: Default ON for meshes, but OFF if garbage or other types
+        group.visible = (type === 'mesh' && !isGarbage);
+
+        modelGroup.add(group);
+        objectGroups.push(group);
+
+        objectListData.push({
+            type,
+            name: `${type.charAt(0).toUpperCase() + type.slice(1)} #${i + 1}`,
+            group,
+            visible: group.visible
+        });
+    }
+
+    refreshObjectList();
+
+    if (modelGroup.children.length) {
+        const box = new THREE.Box3().setFromObject(modelGroup);
+        modelGroup.position.sub(box.getCenter(new THREE.Vector3()));
+        modelGroup.rotation.y = Math.PI;
+        const sz = box.getSize(new THREE.Vector3()).length();
+        camera.position.set(sz, sz, sz);
+        controls.target.set(0, 0, 0);
+        document.getElementById('status').innerText = `Loaded: ${nObj} objects (handedness corrected)`;
+    }
+
+    convertToHierarchy();	 
+    applyPosTransforms(flipY);
+
+    animations = [];
+    currentAnimIndex = -1;
+    currentFrameFloat = 0;
+
+
+
+}
+
+function convertToHierarchy() {
+    if (objectGroups.length < 2) return;
+
+    // We start with the first object as our primary parent/root
+    let lastLargeMesh = objectGroups[0];
+    let root = objectGroups[0];
+    let rootChange = 0; //0 - pelvis, 2 - torso
+
+    for (let i = 1; i < objectGroups.length; i++) {
+        const currentGroup = objectGroups[i];
+
+        // Calculate total vertices
+        let totalVerts = 0;
+        currentGroup.children.forEach(child => {
+            if (child.geometry && child.geometry.attributes.position) {
+                totalVerts += child.geometry.attributes.position.count;
+            }
+        });
+
+        if (totalVerts > 9) {
+            // This is a significant part: attach to the previous large part
+            lastLargeMesh.add(currentGroup);
+            // Update our pointer so the next part attaches to THIS one (chaining)
+            lastLargeMesh = currentGroup;
+	    if (rootChange === 2)
+	    {
+	       root = currentGroup;
+	       rootChange += 1; 	
+	    }
+        } else {
+            // attach to the global root
+            root.add(currentGroup);	    	
+	    if (lastLargeMesh === root){
+
+	    }
+	    else
+	    {
+	       rootChange += 1;
+	    }
+	    lastLargeMesh = root;	
+        }
+    }
+    
+    generateBoneLookup();	
+}
+
+function generateBoneLookup() {
+    let positiveCount = 0;
+    
+    // Tracking variables mirroring convertToHierarchy
+    let rootIdx = 0;
+    let lastLargeIdx = 0;
+    let rootChange = 0;
+
+    // Track depth for each node [index] = depth
+    const depths = new Array(objectGroups.length).fill(0);
+
+    for (let i = 0; i < objectGroups.length; i++) {
+        const currentGroup = objectGroups[i];
+
+        // 1. Calculate total vertices for this group
+        let totalVerts = 0;
+        currentGroup.children.forEach(child => {
+            if (child.geometry && child.geometry.attributes.position) {
+                totalVerts += child.geometry.attributes.position.count;
+            }
+        });
+
+        // 2. Determine Depth and Hierarchy Position
+        let currentDepth = 0;
+
+        if (i === 0) {
+            // Index 0 is the Root (Pelvis)
+            currentDepth = 0;
+            depths[0] = 0;
+        } else if (totalVerts > 9) {
+            // Chaining logic: this mesh attaches to the previous large mesh
+            currentDepth = depths[lastLargeIdx] + 1;
+            depths[i] = currentDepth;
+            
+            // Update pointers
+            lastLargeIdx = i;
+            if (rootChange === 2) {
+                rootIdx = i;
+                rootChange += 1;
+            }
+        } else {
+            // Attachment logic: this mesh attaches to the current global root
+            currentDepth = depths[rootIdx] + 1;
+            depths[i] = currentDepth;
+
+            // Update pointers
+            if (lastLargeIdx !== rootIdx) {
+                rootChange += 1;
+            }
+            lastLargeIdx = rootIdx;
+        }
+
+        // 3. Apply PSX Rules
+        const isSignificant = totalVerts > 9;
+        const isWithinDepth = currentDepth < 5;
+        const isUnderLimit = positiveCount < 15;
+
+        if (isSignificant && isWithinDepth && isUnderLimit) {
+            boneLookup[i] = 1;
+            positiveCount++;
+        } else {
+            boneLookup[i] = -1;
+        }
+    }
+
+    console.log("Raw Array:", boneLookup);
+
+}
+
+function parseTIM(buf) {
+    const dv = new DataView(buf);
+    let o = 0;
+    if (dv.getUint32(o, true) !== 0x10) return false;
+    o += 4;
+    const flags = dv.getUint32(o, true);
+    o += 4;
+
+    if (flags & 8) {
+        o += 4;
+        const dx = dv.getUint16(o, true); o += 2;
+        const dy = dv.getUint16(o, true); o += 2;
+        const w  = dv.getUint16(o, true); o += 2;
+        const h  = dv.getUint16(o, true); o += 2;
+        for (let y = 0; y < h; y++) {
+            for (let x = 0; x < w; x++) {
+                vram[(dy + y) * 1024 + (dx + x)] = dv.getUint16(o, true);
+                o += 2;
+            }
+        }
+    }
+
+    o += 4;
+    const dx = dv.getUint16(o, true); o += 2;
+    const dy = dv.getUint16(o, true); o += 2;
+    const w  = dv.getUint16(o, true); o += 2;
+    const h  = dv.getUint16(o, true); o += 2;
+    for (let y = 0; y < h; y++) {
+        for (let x = 0; x < w; x++) {
+            vram[(dy + y) * 1024 + (dx + x)] = dv.getUint16(o, true);
+            o += 2;
+        }
+    }
+    return true;
+}
+
+// Event listeners
+document.getElementById('load-tmd').onclick = () => document.getElementById('tmd-loader').click();
+document.getElementById('load-tim').onclick = () => document.getElementById('tim-loader').click();
+document.getElementById('load-pos').onclick = () => document.getElementById('pos-loader').click();
+document.getElementById('load-anm').onclick = () => document.getElementById('anm-loader').click();
+
+document.getElementById('tmd-loader').onchange = e => {
+    const reader = new FileReader();
+    reader.onload = ev => {
+        posRawData = [];
+        parseTMD(ev.target.result);
+    };
+    reader.readAsArrayBuffer(e.target.files[0]);
+};
+
+document.getElementById('tim-loader').onchange = async e => {
+    for (const file of e.target.files) {
+        const buf = await file.arrayBuffer();
+        parseTIM(buf);
+    }
+    if (currentBuffer) parseTMD(currentBuffer);
+};
+
+document.getElementById('pos-loader').onchange = e => {
+    if (!objectGroups.length) {
+        alert('Load a TMD first');
+        return;
+    }
+    const reader = new FileReader();
+    reader.onload = ev => {
+        const dv = new DataView(ev.target.result);
+        let pos = 0;
+        const flipY = document.getElementById('flipY').checked;
+        posRawData = [];
+        let applied = 0;
+
+        while (pos + 12 <= dv.byteLength && applied < objectGroups.length) {
+            const entry = {
+                rx: dv.getInt16(pos, true),
+                ry: dv.getInt16(pos + 2, true),
+                rz: dv.getInt16(pos + 4, true),
+                lx: dv.getInt16(pos + 6, true),
+                ly: dv.getInt16(pos + 8, true),
+                lz: dv.getInt16(pos + 10, true)
+            };
+            posRawData.push(entry);
+            pos += 12;
+            applied++;
+        }
+
+        if (applied > 0) {
+            applyPosTransforms(flipY);            
+
+            document.getElementById('status').innerText += ` — TMD_POS applied (${applied} entries)`;
+        }
+    };
+    reader.readAsArrayBuffer(e.target.files[0]);
+};
+
+document.getElementById('anm-loader').onchange = e => {
+    const reader = new FileReader();
+    reader.onload = ev => parseTMD_ANM(ev.target.result);
+    reader.readAsArrayBuffer(e.target.files[0]);
+};
+
+document.getElementById('vram-toggle').onclick = () => {
+    const win = document.getElementById('vram-window');
+    const btn = document.getElementById('vram-toggle');
+    const show = win.style.display !== 'block';
+    win.style.display = show ? 'block' : 'none';
+    btn.textContent = show ? 'Hide VRAM' : 'Show VRAM';
+    if (show) updateVramCanvas();
+};
+
+document.getElementById('uv-overlay').onchange = () => {
+    if (document.getElementById('vram-window').style.display === 'block') {
+        updateVramCanvas();
+    }
+};
+
+document.getElementById('wireframe').onchange = e => allMaterials.forEach(m => m.wireframe = e.target.checked);
+document.getElementById('grid').onchange = e => grid.visible = e.target.checked;
+document.getElementById('flipY').onchange = () => currentBuffer && parseTMD(currentBuffer);
+document.getElementById('gte-lighting').onchange = () => currentBuffer && parseTMD(currentBuffer);
+
+document.getElementById('object-header').onclick = () => {
+    const content = document.getElementById('object-content');
+    content.classList.toggle('show');
+    const arrow = document.querySelector('#object-header span');
+    arrow.textContent = content.classList.contains('show') ? '-' : '+';
+    setPanelsPosition();
+};
+
+document.getElementById('anim-header').onclick = () => {
+    const content = document.getElementById('anim-content');
+    content.classList.toggle('show');
+    const arrow = document.querySelector('#anim-header span');
+    arrow.textContent = content.classList.contains('show') ? '-' : '+';
+};
+
+init();
+setPanelsPosition();
+</script>
+</body>
+</html>

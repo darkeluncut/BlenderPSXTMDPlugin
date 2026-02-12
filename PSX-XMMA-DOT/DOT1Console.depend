@@ -1,0 +1,19 @@
+# depslib dependency file v1.0
+1721278109 source:k:\codeblockscoding\dot1console\main.cpp
+	<windows.h>
+	<filesystem>
+	<iostream>
+	<fstream>
+	<vector>
+	<string>
+	<stdio.h>
+	<cstdint>
+	<iomanip>
+	<sstream>
+	<sys/stat.h>
+	<dirent.h>
+	<algorithm>
+	<direct.h>
+	<unistd.h>
+	<direct.h>
+

@@ -1,0 +1,7 @@
+# depslib dependency file v1.0
+1720535729 source:k:\codeblockscoding\wadconsole\main.cpp
+	<iostream>
+	<fstream>
+	<vector>
+	<string>
+
