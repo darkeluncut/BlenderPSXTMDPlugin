@@ -1,6 +1,6 @@
 <img width="1911" height="911" alt="image" src="https://github.com/user-attachments/assets/25dc8d68-c19e-4556-9dfc-08007440b372" />
 
-Consolidated X-Men Mutant Apocalypse (PSX) Toolkit.
+Consolidated X-Men Mutant Academy (PSX) Toolkit.
 
 + WAD Tool can unpack and repack large WAD archives.
 + DOT Tool can unpack and repack inner DOT archives.
