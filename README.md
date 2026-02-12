@@ -1,12 +1,10 @@
-A very crude Blender plugin that can import/export tmd models from PSX games. Should work with non-gradated flat and gouraud tris and quads. 
-Tested only with gouraud textured tris in X-Men: MA.
+<img width="1911" height="911" alt="image" src="https://github.com/user-attachments/assets/25dc8d68-c19e-4556-9dfc-08007440b372" />
 
-There is a side-panel to view/change face flags when in face edit mode. Receiving info breaks from time to time, but setting doesn't, you can open spreadsheet to visualize.
-Flags are stored as custom attributes per face.
+Consolidated X-Men Mutant Apocalypse (PSX) Toolkit.
 
-Has normal table issues I wasn't able to solve. Won't probably arise with character models, but might cause issues with levels.
+WAD Tool can unpack and repack large WAD archives.
+DOT Tool can unpack and repack inner DOT archives.
+TMD Viewer can preview TMD models with TMD_POS (default position), TIMs (textures) and TMD_ANM (animations). 
+BlenderPSXTMDPlugin is a very crude Blender plugin that can import/export tmd models from PSX games. Should work with non-gradated flat and gouraud tris and quads. 
 
 Provided as is.
-
-Update (02/09/2026):
-Standalone ThreeJS/HTML Viewer.
